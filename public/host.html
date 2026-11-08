@@ -1,0 +1,79 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Квиз — ведущий</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#2d1b69;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center}
+.s{display:none;width:100%;max-width:1100px;padding:24px}.s.on{display:block}
+h1{font-size:44px;margin:0 0 16px}h2{font-size:38px;margin:12px 0}
+textarea{width:100%;height:260px;border-radius:12px;border:0;padding:14px;font:16px/1.5 monospace}
+input[type=number]{width:80px;padding:8px;border-radius:8px;border:0;font-size:18px}
+button{background:#fff;color:#2d1b69;border:0;border-radius:12px;padding:14px 32px;font-size:22px;font-weight:700;cursor:pointer;margin:12px}
+.code{font-size:84px;font-weight:800;letter-spacing:8px}.qr{background:#fff;border-radius:16px;padding:8px;width:320px;height:320px}
+#pl span{display:inline-block;background:#ffffff26;border-radius:20px;padding:8px 18px;margin:5px;font-size:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+.t{border-radius:12px;padding:26px;font-size:28px;font-weight:700;position:relative}
+.t:nth-child(1){background:#e21b3c}.t:nth-child(2){background:#1368ce}.t:nth-child(3){background:#d89e00}.t:nth-child(4){background:#26890c}
+.t.no{opacity:.25}.t b{float:right}.big{font-size:90px;font-weight:800}
+.row{background:#ffffff26;border-radius:10px;padding:12px 20px;margin:8px auto;max-width:600px;display:flex;justify-content:space-between;font-size:24px}
+small{opacity:.7;font-size:15px;display:block;margin-top:8px}
+</style></head><body>
+<div class="s on" id="s0"><h1>🎯 Создать квиз</h1>
+<textarea id="qs">Столица Австралии?
+Сидней
+*Канберра
+Мельбурн
+Перт
+
+Сколько планет в Солнечной системе?
+7
+*8
+9
+10
+
+Какой газ мы вдыхаем для жизни?
+Азот
+*Кислород
+Гелий
+Водород</textarea>
+<small>Вопросы разделяйте пустой строкой. Первая строка — вопрос, далее 2–4 ответа, правильный отметьте звёздочкой *</small>
+<p>Секунд на вопрос: <input type="number" id="time" value="20" min="5" max="120"></p>
+<button onclick="create()">Создать игру</button><div id="e" style="color:#ffb3b3"></div></div>
+
+<div class="s" id="s1"><h2>Присоединяйтесь с телефона</h2>
+<img class="qr" id="qr"><div>или откройте <b id="url"></b> и введите код</div><div class="code" id="code"></div>
+<div id="pl"></div><button id="go" onclick="next()">Начать игру</button></div>
+
+<div class="s" id="s2"><div style="display:flex;justify-content:space-between;font-size:24px"><span id="num"></span><span id="cnt"></span><span class="big" style="font-size:48px" id="tm"></span></div>
+<h2 id="q"></h2><div class="grid" id="a"></div><button onclick="next()">Пропустить</button></div>
+
+<div class="s" id="s3"><h2>Результаты вопроса</h2><div class="grid" id="ra"></div><h2>🏆 Топ</h2><div id="top"></div><button id="nx" onclick="next()">Дальше</button></div>
+<div class="s" id="s4"><h1>🏆 Итоги</h1><div id="fin"></div></div>
+<script>
+const $=s=>document.getElementById(s),ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+const show=n=>{document.querySelectorAll('.s').forEach((e,i)=>e.classList.toggle('on',i===n))};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const send=o=>ws.send(JSON.stringify(o)),next=()=>send({t:'next'});
+let tick,cur;
+function create(){
+  const qs=[];
+  for(const b of $('qs').value.trim().split(/\n\s*\n/)){
+    const l=b.split('\n').map(x=>x.trim()).filter(Boolean);
+    if(l.length<3||l.length>5)return $('e').textContent='В каждом вопросе должно быть 2–4 ответа';
+    const a=l.slice(1),c=a.findIndex(x=>x[0]==='*');
+    if(c<0)return $('e').textContent='Отметьте правильный ответ звёздочкой: «'+l[0]+'»';
+    qs.push({q:l[0],a:a.map(x=>x.replace(/^\*\s*/,'')),c});
+  }
+  send({t:'create',qs,time:+$('time').value,origin:location.origin});
+}
+ws.onmessage=e=>{const m=JSON.parse(e.data);
+ if(m.t==='created'){$('qr').src=m.qr;$('code').textContent=m.code;$('url').textContent=location.host+'/play';show(1)}
+ else if(m.t==='lobby'){$('pl').innerHTML=m.players.map(n=>'<span>'+esc(n)+'</span>').join('')||'<small>Ждём игроков…</small>'}
+ else if(m.t==='q'){cur=m;$('num').textContent=(m.i+1)+' / '+m.n;$('cnt').textContent='Ответили: 0';$('q').textContent=m.q;
+  $('a').innerHTML=m.a.map((x,i)=>'<div class="t">'+'▲◆●■'[i]+' '+esc(x)+'</div>').join('');
+  let left=m.time;$('tm').textContent=left;clearInterval(tick);tick=setInterval(()=>{$('tm').textContent=Math.max(0,--left)},1000);show(2)}
+ else if(m.t==='cnt'){$('cnt').textContent='Ответили: '+m.n+' / '+m.total}
+ else if(m.t==='r'){clearInterval(tick);
+  $('ra').innerHTML=cur.a.map((x,i)=>'<div class="t'+(i===m.correct?'':' no')+'">'+esc(x)+'<b>'+m.counts[i]+'</b></div>').join('');
+  $('top').innerHTML=m.board.map((p,i)=>'<div class="row"><span>'+(i+1)+'. '+esc(p.name)+'</span><b>'+p.score+'</b></div>').join('');
+  $('nx').textContent=m.last?'Показать итоги':'Следующий вопрос';show(3)}
+ else if(m.t==='end'){$('fin').innerHTML=m.board.map((p,i)=>'<div class="row"><span>'+['🥇','🥈','🥉'][i]+' '+(i+1)+'. '+esc(p.name)+'</span><b>'+p.score+'</b></div>').join('');show(4)}
+};
+</script></body></html>
